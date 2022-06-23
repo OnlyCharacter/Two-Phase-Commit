@@ -1,7 +1,21 @@
 #include <sqlite3.h>
 #include <stdlib.h>
 #include <string.h>
+/*
+    memset()
+    strncmp()
+    strncpy()
+*/
 #include <stdio.h>
+/*
+    fprintf()
+    printf()
+    snprintf()
+*/
+#include <unistd.h>
+/*
+    access()
+*/
 
 #define SQLITE_MAX_SQL_LENGTH 1000000
 
@@ -24,8 +38,8 @@
 #define SELECT_FAILED   402
 #define DELETE_FAILED   403
 
-char* TABLE = "kv";
-
+char* TABLE     = "kv";
+char* filename  = "db.sqlite";
 /**
  * @data        sqlite3_exec()提供的第三个参数
  * @argc        列数
@@ -154,20 +168,53 @@ main(int argc, char** argv)
 {
     int         rc;
     char*       pstr;
+    char*       zErrMsg;
     char        key[BUFF_LEN];
     char        value[BUFF_LEN];
-    char        buffer[BUFF_LEN*4];
+    char        buffer[BUFF_LEN * 4];
     sqlite3*    db;
 
-    rc = sqlite3_open_v2("db1.sqlite", &db, SQLITE_OPEN_READWRITE, NULL);
-    if (rc != SQLITE_OK) {
-        fprintf(stderr, "sqlite3_open: %s\n", sqlite3_errmsg(db));
-        sqlite3_close_v2(db);
-        return OPEN_FAILED;
+    // 文件存在
+    if (access(filename, F_OK) == 0) {
+        rc = sqlite3_open_v2(filename, &db, SQLITE_OPEN_READWRITE, NULL);
+        
+        if (rc != SQLITE_OK) {
+            fprintf(stderr, "Open %s failed: %s\n", filename, sqlite3_errmsg(db));
+            sqlite3_close_v2(db);
+            return OPEN_FAILED;
+        }
+        else {
+            fprintf(stderr, "Open %s successfully.\n", filename);
+        }
     }
+    // 文件未创建
     else {
-        fprintf(stderr, "Opened database successfully!\n");
+        // 创建数据库
+        rc = sqlite3_open_v2(filename, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, NULL);
+        if (rc != SQLITE_OK) {
+            fprintf(stderr, "Create %s failed: %s\n", filename, sqlite3_errmsg(db));
+            sqlite3_close_v2(db);
+            return OPEN_FAILED;
+        }
+        else {
+            fprintf(stderr, "Open %s successfully.\n", filename);
+        }
+
+        // 创建数据表
+        snprintf(buffer, BUFF_LEN * 4,
+            "CREATE TABLE %s (key varchar(1000) PRIMARY KEY, value varchar(1000));", TABLE);
+        rc = sqlite3_exec(db, buffer, callback, 0, &zErrMsg);
+        if( rc != SQLITE_OK ) {
+            fprintf(stderr, "Create table '%s' error: %s", TABLE, zErrMsg);
+            sqlite3_free(zErrMsg);
+            return OPEN_FAILED;
+        }
+        else {
+            fprintf(stdout, "Create table '%s' successfully.\n", TABLE);
+        }
     }
+
+    fprintf(stderr, "Usage:\nQUIT\nPUT <key> <value>\nGET <key>\nDEL <key>\n");
 
     while (1) {
         read_input(buffer, BUFF_LEN * 4);
