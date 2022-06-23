@@ -14,8 +14,6 @@
 
 //全局变量
 int g_repl_serv_fds[REPL_SERV_COUNT] = {-1}; //与从服务端的连接套接字文件描述符集
-int g_clie_count = 0;                        //连接的客户端数量
-//用于在主服务端连接客户端的子进程中动态分配端口号，以再次连接从服务端
 
 //函数声明————————————————————
 void clie_handle(int connect_fd);                       //客户端处理
@@ -92,8 +90,6 @@ int main(int argc, char *argv[])
             perror("Failed to accept connection");
             exit(EXIT_FAILURE);
         }
-
-        ++g_clie_count; //连接的客户端数量计数+1
 
         //使用子进程处理
         if ((pid = fork()) == 0)
@@ -308,74 +304,39 @@ void get(int connect_fd, char recv_msg[])
     return;
 }
 
-void conn_reli_serv() //连接从服务端
+//连接从服务端
+void conn_reli_serv()
 {
-    //网络连接————————————————————
-    int listen_fd; //监听套接字文件描述符
-
-    //创建套接字,获取套接字文件描述符
-    if ((listen_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
-    {
-        perror("Failed to create the server's socket");
-        exit(EXIT_FAILURE);
-    }
-
-    //设置套接字选项为可重用本地地址
-    int reuse = 1;
-
-    if ((setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse))) == -1)
-    {
-        close(listen_fd);
-
-        perror("Failed to set the socket's options");
-        exit(EXIT_FAILURE);
-    }
-
-    struct sockaddr_in mast_serv_addr; //主服务端网络信息结构体
-
-    //初始化主服务端网络信息结构体
-    bzero(&mast_serv_addr, sizeof(mast_serv_addr));
-    mast_serv_addr.sin_family = AF_INET;
-    mast_serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    mast_serv_addr.sin_port = htons(SERV_PORT + g_clie_count); //改
-
-    //绑定套接字与网络信息
-    if ((bind(listen_fd, (struct sockaddr *)(&mast_serv_addr), sizeof(mast_serv_addr))) == -1)
-    {
-        close(listen_fd);
-
-        perror("Failed to bind the socket");
-        exit(EXIT_FAILURE);
-    }
-
-    //套接字设置被动监听状态
-    if ((listen(listen_fd, REPL_SERV_COUNT)) == -1) //改
-    {
-        close(listen_fd);
-
-        perror("Failed to configure the socket's listening status");
-        exit(EXIT_FAILURE);
-    }
-
-    //连接从服务端
-    struct sockaddr_in repl_serv_addr; //从服务端网络信息结构体
-    int addr_size;                     //网络信息结构体大小
-
-    bzero(&repl_serv_addr, sizeof(repl_serv_addr));
-    addr_size = sizeof(struct sockaddr);
-
-    //循环监听从服务端请求
+    //循环连接从服务端
     for (int i = 0; i < REPL_SERV_COUNT; ++i)
     {
-        //与从服务端建立连接
-        if ((g_repl_serv_fds[i] = accept(listen_fd, (struct sockaddr *)(&repl_serv_addr), &addr_size)) == 0)
+        //创建套接字并获取套接字文件描述符
+        if ((g_repl_serv_fds[i] = socket(AF_INET, SOCK_STREAM, 0)) == -1)
         {
-            perror("Failed to accept connection");
-            exit(EXIT_FAILURE);
+            perror("Failed to create the server's socket");
+            return;
+        }
+
+        struct sockaddr_in repl_serv_addr; //从服务端网络信息结构体
+        int addr_size;                     //网络信息结构体大小
+
+        bzero(&repl_serv_addr, sizeof(repl_serv_addr));
+        addr_size = sizeof(struct sockaddr);
+
+        //初始化从服务端网络信息结构体
+        repl_serv_addr.sin_family = AF_INET;
+        repl_serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+        repl_serv_addr.sin_port = htons(SERV_PORT + 1 + i); //动态更新端口号
+
+        //与从服务端建立连接
+        if ((connect(g_repl_serv_fds[i], (struct sockaddr *)(&repl_serv_addr), addr_size)) == -1)
+        {
+            close(g_repl_serv_fds[i]);
+
+            perror("Failed to establish connection");
+            return;
         }
     }
-
-    close(listen_fd); //关闭监听套接字文件描述符
 
     return;
 }
