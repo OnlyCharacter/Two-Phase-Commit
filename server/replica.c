@@ -28,6 +28,26 @@
 */
 #include "wrapper.h"
 
+char* TABLE     = "kv";
+char* filename  = "db.sqlite";
+
+/**
+ * @data        sqlite3_exec()提供的第三个参数
+ * @argc        列数
+ * @argv        该列的值
+ * @azColName   该列的名字
+*/
+static int
+callback(void* data, int argc, char** argv, char** azColName)
+{
+    // int i;
+
+    // for (i = 0; i < argc; i++)
+    //     printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
+    // printf("\n");
+    snprintf(data, BUFF_LEN, "%s", argv[argc - 1]);
+    return 0;
+}
 
 ssize_t
 Read(int fd, void *buf, size_t size) {
@@ -55,10 +75,39 @@ writen(int fd, const void *vptr, size_t n)
 }
 
 ssize_t
-send_yes(int sockfd)
+send_YES(int sockfd)
 {
-    char* yes = "yes";
-    return writen(sockfd, yes, 4);
+    char* yes = "YES";
+    return writen(sockfd, yes, strlen(yes));
+}
+
+ssize_t
+send_NO(int sockfd)
+{
+    char* no = "NO";
+    return writen(sockfd, no, strlen(no));
+}
+
+int
+wait_yes(int sockfd)
+{
+    int retval;
+    char buff[BUFF_LEN];
+    memset(buff, 0, BUFF_LEN);
+    retval = Read(sockfd, buff, BUFF_LEN);
+    // 连接断开
+    if (retval == 0) {
+        return retval;
+        close(sockfd);
+    }
+    else if (retval == -1) {
+        return retval;
+        close(sockfd);
+    }
+    else if (retval > 0 && strcmp(buff, "YES") == 0)
+        return 1;
+    else
+        return retval;
 }
 
 int
@@ -75,12 +124,13 @@ main(int argc, char** argv)
     char                buffer[BUFF_LEN * 4];
     char*               pstr;
     char*               zErrMsg;
+    char*               null_value = "NULL VALUE";
     char                key[BUFF_LEN];
     char                value[BUFF_LEN];
     sqlite3*            db;
 
 
-    // 文件存在
+    // 数据库文件存在
     if (access(filename, F_OK) == 0) {
         rc = sqlite3_open_v2(filename, &db, SQLITE_OPEN_READWRITE, NULL);
         
@@ -93,7 +143,7 @@ main(int argc, char** argv)
             fprintf(stderr, "Open %s successfully.\n", filename);
         }
     }
-    // 文件未创建
+    // 数据库文件未创建
     else {
         // 创建数据库
         rc = sqlite3_open_v2(filename, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, NULL);
@@ -127,6 +177,12 @@ main(int argc, char** argv)
         return -1;
     }
 
+    if ((setsockopt(listen_sock, SOL_SOCKET, SO_REUSEADDR, &len, sizeof(socklen_t))) == -1)
+    {
+        close(listen_sock);
+        return -1;
+    }
+
     // 创建 sockaddr_in
     memset(&replica, 0, sizeof(struct sockaddr_in));
     replica.sin_family       = AF_INET;
@@ -150,7 +206,7 @@ main(int argc, char** argv)
 
     for ( ; ; ) {
         // 等待连接
-        if ((connect_sock = accept(listen_sock, &server, &len)) == -1) {
+        if ((connect_sock = accept(listen_sock, (struct sockaddr*)&server, &len)) == -1) {
             if (errno == EINTR)
                 continue;
             else
@@ -161,6 +217,7 @@ main(int argc, char** argv)
         for ( ; ; ) {
             memset(buffer, 0, BUFF_LEN * 4);
 
+            // 接受命令
             read_size = recv(connect_sock, buffer, BUFF_LEN * 4, 0);
             // 断开
             if (read_size == 0) {
@@ -174,17 +231,16 @@ main(int argc, char** argv)
                 break;
             }
 
-            if (send_yes(connect_sock) <= 0) {
-                fprintf(stderr, "发送yes失败\n");
+            // 发送 YES 给 master
+            if (send_YES(connect_sock) <= 0) {
+                fprintf(stderr, "发送YES失败\n");
                 close(connect_sock);
                 break;
             }
 
-            
-
+            // 处理命令
             memset(key, 0, BUFF_LEN);
             memset(value, 0, BUFF_LEN);
-
             pstr = strtok(buffer, " \t");
             if (pstr == NULL)
                 continue;
@@ -195,23 +251,48 @@ main(int argc, char** argv)
                     continue;
                 strncpy(key, pstr, BUFF_LEN);
 
-                sqlite_select(&db, key, value);
-                if (value[0] != '\0')
-                    fprintf(stderr, "%s\n", value);
+                // 等待第二次yes
+                if (wait_yes(connect_sock) != 1) {
+                    break;
+                }
+                rc = sqlite_select(&db, key, value);
+                // 执行失败
+                if (rc != SELECT_SUCCESS) {
+                    fprintf(stderr, "%d select failed\n", rc);
+                    send_NO(connect_sock);
+                }
+                // 执行成功，但是空值
+                else if (value[0] == '\0') {
+                    writen(connect_sock, null_value, strlen(null_value));
+                }
+                // 执行成功，返回 value
+                writen(connect_sock, value, strlen(value));
             }
 
             else if (strncmp(pstr, "PUT", 3) == 0) {
                 pstr = strtok(NULL, " \t");
-                if (pstr == NULL)
-                    continue;
+                if (pstr == NULL) {
+                    send_NO(connect_sock);
+                }
                 strncpy(key, pstr, BUFF_LEN);
 
+
                 pstr = strtok(NULL, " \t");
-                if (pstr == NULL)
-                    continue;
+                if (pstr == NULL) {
+                    send_NO(connect_sock);
+                }
                 strncpy(value, pstr, BUFF_LEN);
 
-                sqlite_insert(&db, key, value);
+                // 等待第二次yes
+                if (wait_yes(connect_sock) != 1) {
+                    break;
+                }
+                rc = sqlite_insert(&db, key, value);
+                // 执行失败
+                if (rc != INSERT_SUCCESS) {
+                    fprintf(stderr, "%d insert failed\n", rc);
+                    send_NO(connect_sock);
+                }
             }
 
             else if (strncmp(pstr, "DEL", 3) == 0) {
@@ -220,10 +301,16 @@ main(int argc, char** argv)
                     continue;
                 strncpy(key, pstr, BUFF_LEN);
 
-                sqlite_delete(&db, key);
+                // 等待第二次yes
+                if (wait_yes(connect_sock) != 1) {
+                    break;
+                }
+                rc = sqlite_delete(&db, key);
+                send_YES(connect_sock);
             }
 
             else if (strncmp(pstr, "QUIT", 4) == 0) {
+                // send_YES(connect_sock);
                 break;
             }
         }
