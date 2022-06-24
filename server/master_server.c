@@ -75,7 +75,7 @@ int main(int argc, char *argv[])
 
     int connect_fd = -1;          //连接套接字文件描述符
     struct sockaddr_in clie_addr; //客户端网络信息结构体
-    int addr_size;                //网络信息结构体大小
+    socklen_t addr_size;                //网络信息结构体大小
     int pid = -1;                 //进程标识符
 
     bzero(&clie_addr, sizeof(clie_addr));
@@ -122,22 +122,26 @@ void clie_handle(int connect_fd)
             perror("Failed to receive command\n");
             continue; //循环接收
         }
-
+        printf("RECV: %s\n", recv_msg);
         //处理
         if ((strstr(recv_msg, "PUT")) != NULL) // PUT请求
         {
+            printf("Enter PUT\n");
             two_phase_commit(connect_fd, recv_msg); //两阶段提交
         }
         else if ((strstr(recv_msg, "DEL")) != NULL) // DEL请求
         {
+            printf("Enter DEL\n");
             two_phase_commit(connect_fd, recv_msg); //两阶段提交
         }
         else if ((strstr(recv_msg, "GET")) != NULL) // GET请求
-        {
+        {   
+            printf("Enter GET\n");
             get(connect_fd, recv_msg); //获取
         }
         else if ((strstr(recv_msg, "QUIT")) != NULL) // QUIT请求
         {
+            printf("Enter QUIT\n");
             close(connect_fd);  //关闭套接字
             exit(EXIT_SUCCESS); //退出进程
         }
@@ -151,12 +155,12 @@ void two_phase_commit(int connect_fd, char recv_msg[])
 {
     //连接从服务端
     conn_reli_serv();
-
+    printf("connect successfully\n");
     //对每个从服务端发送准备请求
     char send_msg[BUFF_SIZE]; //发送从服务端端消息缓冲区
 
     strncpy(send_msg, recv_msg, BUFF_SIZE); //发送从服务端消息为接收客户端消息
-    bzero(recv_msg, sizeof(*recv_msg));     //清空接收从服务端消息
+    bzero(recv_msg, BUFF_SIZE);     //清空接收从服务端消息
 
     for (int i = 0; i < REPL_SERV_COUNT; ++i)
     {
@@ -197,7 +201,8 @@ void two_phase_commit(int connect_fd, char recv_msg[])
 
     //没有准备失败调用返回就是准备成功
     int ack_count = 0; //从服务端响应提交成功的数量
-
+    snprintf(send_msg, 4, "YES");
+    bzero(recv_msg, BUFF_SIZE);
     //对每个从服务端发送提交请求
     for (int i = 0; i < REPL_SERV_COUNT; ++i)
     {
@@ -265,14 +270,15 @@ void two_phase_commit(int connect_fd, char recv_msg[])
 void get(int connect_fd, char recv_msg[])
 {
     conn_reli_serv(); //连接从服务端
-
+    printf("connect successfully\n");
     char send_msg[BUFF_SIZE]; //发送从服务端端消息缓冲区
 
     strncpy(send_msg, recv_msg, BUFF_SIZE); //发送从服务端消息为接收客户端消息
-    bzero(recv_msg, sizeof(*recv_msg));     //清空接收从服务端消息
+    bzero(recv_msg, BUFF_SIZE);     //清空接收从服务端消息
 
     //默认在第一个从服务端获取
     //发送从服务端消息
+    printf("get send: %s\n", send_msg);
     if ((send(g_repl_serv_fds[0], send_msg, BUFF_SIZE, 0)) == -1)
     {
         perror("Failed to send messages to the replica server");
