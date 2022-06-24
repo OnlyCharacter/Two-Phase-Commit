@@ -231,13 +231,7 @@ main(int argc, char** argv)
                 break;
             }
 
-            // 发送 YES 给 master
-            if (send_YES(connect_sock) <= 0) {
-                fprintf(stderr, "发送YES失败\n");
-                close(connect_sock);
-                break;
-            }
-
+            fprintf(stderr, "RECV: %s\n", buffer);
             // 处理命令
             memset(key, 0, BUFF_LEN);
             memset(value, 0, BUFF_LEN);
@@ -251,10 +245,10 @@ main(int argc, char** argv)
                     continue;
                 strncpy(key, pstr, BUFF_LEN);
 
-                // 等待第二次yes
-                if (wait_yes(connect_sock) != 1) {
-                    break;
-                }
+                // // 等待第二次yes
+                // if (wait_yes(connect_sock) != 1) {
+                //     break;
+                // }
                 rc = sqlite_select(&db, key, value);
                 // 执行失败
                 if (rc != SELECT_SUCCESS) {
@@ -270,12 +264,19 @@ main(int argc, char** argv)
             }
 
             else if (strncmp(pstr, "PUT", 3) == 0) {
+
+                // 发送 YES 给 master
+                if (send_YES(connect_sock) <= 0) {
+                    fprintf(stderr, "发送YES失败\n");
+                    close(connect_sock);
+                    break;
+                }
+
                 pstr = strtok(NULL, " \t");
                 if (pstr == NULL) {
                     send_NO(connect_sock);
                 }
                 strncpy(key, pstr, BUFF_LEN);
-
 
                 pstr = strtok(NULL, " \t");
                 if (pstr == NULL) {
@@ -296,6 +297,13 @@ main(int argc, char** argv)
             }
 
             else if (strncmp(pstr, "DEL", 3) == 0) {
+                // 发送 YES 给 master
+                if (send_YES(connect_sock) <= 0) {
+                    fprintf(stderr, "发送YES失败\n");
+                    close(connect_sock);
+                    break;
+                }
+
                 pstr = strtok(NULL, " \t");
                 if (pstr == NULL)
                     continue;
@@ -310,6 +318,7 @@ main(int argc, char** argv)
             }
 
             else if (strncmp(pstr, "QUIT", 4) == 0) {
+
                 // send_YES(connect_sock);
                 break;
             }
