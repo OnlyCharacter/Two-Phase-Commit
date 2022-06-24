@@ -1,3 +1,6 @@
+#ifndef WRAPPER_H
+#define WRAPPER_H
+#endif
 #include <sqlite3.h>
 
 #define SQLITE_MAX_SQL_LENGTH 1000000
@@ -21,8 +24,8 @@
 #define SELECT_FAILED   402
 #define DELETE_FAILED   403
 
-char* TABLE     = "kv";
-char* filename  = "db.sqlite";
+extern char* TABLE;
+extern char* filename;
 
 static int
 callback(void* data, int argc, char** argv, char** azColName);

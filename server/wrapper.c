@@ -18,6 +18,7 @@
 */
 #include "wrapper.h"
 
+
 /**
  * @data        sqlite3_exec()提供的第三个参数
  * @argc        列数
@@ -140,7 +141,7 @@ read_input(char* buffer, int size)
 	}
 }
 
-
+/*
 int
 main(int argc, char** argv)
 {
@@ -248,3 +249,4 @@ main(int argc, char** argv)
     sqlite3_close(db);
     return 0;
 }
+*/
