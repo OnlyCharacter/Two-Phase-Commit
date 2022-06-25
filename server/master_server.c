@@ -109,6 +109,7 @@ int main(int argc, char *argv[])
 //客户端处理
 void clie_handle(int connect_fd)
 {
+    ssize_t     rc;
     char recv_msg[BUFF_SIZE]; //接收客户端消息缓冲区
 
     //循环接收客户端消息并处理
@@ -117,10 +118,15 @@ void clie_handle(int connect_fd)
         bzero(recv_msg, sizeof(*recv_msg));
 
         //接收客户端消息
-        if (recv(connect_fd, recv_msg, BUFF_SIZE, 0) < 0)
+        if ((rc = recv(connect_fd, recv_msg, BUFF_SIZE, 0)) < 0)
         {
             perror("Failed to receive command\n");
             continue; //循环接收
+        }
+        /*      连接断开        */
+        else if (rc == 0) {
+            close(connect_fd);
+            return;
         }
         printf("RECV: %s\n", recv_msg);
         //处理
