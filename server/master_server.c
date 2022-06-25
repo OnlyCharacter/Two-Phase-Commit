@@ -115,7 +115,7 @@ void clie_handle(int connect_fd)
     //循环接收客户端消息并处理
     while (1)
     {
-        bzero(recv_msg, sizeof(*recv_msg));
+        bzero(recv_msg, BUFF_SIZE);
 
         //接收客户端消息
         if ((rc = recv(connect_fd, recv_msg, BUFF_SIZE, 0)) < 0)
@@ -225,7 +225,7 @@ void two_phase_commit(int connect_fd, char recv_msg[])
             return;
         }
 
-        if ((strstr(recv_msg, "NACK")) != NULL) //提交失败  因为只要有一个提交失败都不能进行
+        if ((strstr(recv_msg, "NO")) != NULL) //提交失败  因为只要有一个提交失败都不能进行
         {
             //回滚
             rollback(ack_count); //按从服务端提交成功的数量顺序回滚
