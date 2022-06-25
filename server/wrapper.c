@@ -53,7 +53,7 @@ sqlite_insert(sqlite3** db, char* key, char* value)
         return VALUE_NULL;
 
     snprintf(sql, SQLITE_MAX_SQL_LENGTH,
-                "INSERT INTO %s (key, value) VALUES ('%s', '%s');",
+                "BEGIN TRANSACTION;INSERT INTO %s (key, value) VALUES ('%s', '%s');",
                 TABLE, key, value);
 
     rc = sqlite3_exec(*db, sql, NULL, 0, &zErrMsg);
@@ -115,7 +115,7 @@ sqlite_delete(sqlite3** db, char* key)
         return KEY_NULL;
     
     snprintf(sql, SQLITE_MAX_SQL_LENGTH,
-                "DELETE FROM %s where key = '%s';", TABLE, key);
+                "BEGIN TRANSACTION;DELETE FROM %s where key = '%s';", TABLE, key);
 
     rc = sqlite3_exec(*db, sql, NULL, NULL, &zErrMsg);
     if (rc != SQLITE_OK) {
@@ -126,6 +126,50 @@ sqlite_delete(sqlite3** db, char* key)
     else {
         // fprintf(stderr, "DELETE successfully\n");
         return DELETE_SUCCESS;
+    }
+}
+
+int
+commit(sqlite3** db)
+{
+    int  rc;
+    char* zErrMsg;
+    char sql[SQLITE_MAX_SQL_LENGTH];
+
+    
+    snprintf(sql, SQLITE_MAX_SQL_LENGTH, "COMMIT");
+
+    rc = sqlite3_exec(*db, sql, NULL, NULL, &zErrMsg);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "%d sqlite3_exec(): %s\n", rc, zErrMsg);
+        sqlite3_free(zErrMsg);
+        return COMMIT_FAILED;
+    }
+    else {
+        // fprintf(stderr, "COMMIT successfully\n");
+        return COMMIT_SUCCESS;
+    }
+}
+
+int
+rollback(sqlite3** db)
+{
+    int  rc;
+    char* zErrMsg;
+    char sql[SQLITE_MAX_SQL_LENGTH];
+
+    
+    snprintf(sql, SQLITE_MAX_SQL_LENGTH, "ROLLBACK");
+
+    rc = sqlite3_exec(*db, sql, NULL, NULL, &zErrMsg);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "%d sqlite3_exec(): %s\n", rc, zErrMsg);
+        sqlite3_free(zErrMsg);
+        return ROLLBACK_FAILED;
+    }
+    else {
+        // fprintf(stderr, "ROLLBACK successfully\n");
+        return ROLLBACK_SUCCESS;
     }
 }
 

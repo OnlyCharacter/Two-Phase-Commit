@@ -110,6 +110,7 @@ wait_yes(int sockfd)
         return retval;
 }
 
+
 int
 main(int argc, char** argv)
 {
@@ -245,81 +246,100 @@ main(int argc, char** argv)
                     continue;
                 strncpy(key, pstr, BUFF_LEN);
 
-                // // 等待第二次yes
-                // if (wait_yes(connect_sock) != 1) {
-                //     break;
-                // }
+                // 查询
                 rc = sqlite_select(&db, key, value);
-                // 执行失败
-                if (rc != SELECT_SUCCESS) {
-                    fprintf(stderr, "%d select failed\n", rc);
-                    send_NO(connect_sock);
-                }
-                // 执行成功，但是空值
-                else if (value[0] == '\0') {
+                // 执行失败 或 空值
+                if (value[0] == '\0')
                     writen(connect_sock, null_value, strlen(null_value));
-                }
                 // 执行成功，返回 value
-                writen(connect_sock, value, strlen(value));
+                else
+                    writen(connect_sock, value, strlen(value));
+                close(connect_sock);
+                break;
             }
 
             else if (strncmp(pstr, "PUT", 3) == 0) {
-
-                // 发送 YES 给 master
-                if (send_YES(connect_sock) <= 0) {
-                    fprintf(stderr, "发送YES失败\n");
+                /*        获取 key      */
+                pstr = strtok(NULL, " \t");
+                if (pstr == NULL) {
+                    send_NO(connect_sock);
                     close(connect_sock);
                     break;
                 }
-
-                pstr = strtok(NULL, " \t");
-                if (pstr == NULL) {
-                    send_NO(connect_sock);
-                }
                 strncpy(key, pstr, BUFF_LEN);
 
+                /*        获取 value      */
                 pstr = strtok(NULL, " \t");
                 if (pstr == NULL) {
                     send_NO(connect_sock);
+                    close(connect_sock);
+                    break;
                 }
                 strncpy(value, pstr, BUFF_LEN);
 
-                // 等待第二次yes
-                if (wait_yes(connect_sock) != 1) {
-                    break;
-                }
+                /*  执行    */
                 rc = sqlite_insert(&db, key, value);
                 // 执行失败
                 if (rc != INSERT_SUCCESS) {
                     fprintf(stderr, "%d insert failed\n", rc);
                     send_NO(connect_sock);
-                }
-            }
-
-            else if (strncmp(pstr, "DEL", 3) == 0) {
-                // 发送 YES 给 master
-                if (send_YES(connect_sock) <= 0) {
-                    fprintf(stderr, "发送YES失败\n");
                     close(connect_sock);
                     break;
                 }
+                /*  执行成功    */
+                else {
+                    /*   发送 YES，失败回滚   */
+                    rc = send_YES(connect_sock);
+                    if (rc <= 0) {
+                        fprintf(stderr, "发送YES失败\n");
+                        rollback(&db);
+                        close(connect_sock);
+                        break;
+                    }
+                }
 
+                /*   需要回滚   */
+                if (wait_yes(connect_sock) != 1)
+                    rollback(&db);
+                /*   提交   */
+                else {
+                    commit(&db);
+                    send_YES(connect_sock);
+                }
+
+                close(connect_sock);
+                break;
+            }
+
+            else if (strncmp(pstr, "DEL", 3) == 0) {
                 pstr = strtok(NULL, " \t");
                 if (pstr == NULL)
                     continue;
                 strncpy(key, pstr, BUFF_LEN);
 
-                // 等待第二次yes
-                if (wait_yes(connect_sock) != 1) {
+                /*  执行    */
+                rc = sqlite_delete(&db, key);
+                /*  发送 YES 给 master  */
+                if (send_YES(connect_sock) <= 0) {
+                    fprintf(stderr, "发送YES失败\n");
+                    rollback(&db);
+                    close(connect_sock);
                     break;
                 }
-                rc = sqlite_delete(&db, key);
-                send_YES(connect_sock);
+
+                /*  回滚   */
+                if (wait_yes(connect_sock) != 1)
+                    rollback(&db);
+                else {
+                    commit(&db);
+                    send_YES(connect_sock);
+                }
+
+                close(connect_sock);
             }
 
             else if (strncmp(pstr, "QUIT", 4) == 0) {
-
-                // send_YES(connect_sock);
+                close(connect_sock);
                 break;
             }
         }
