@@ -126,7 +126,7 @@ void clie_handle(int connect_fd)
         /*      连接断开        */
         else if (rc == 0) {
             close(connect_fd);
-            return;
+            exit(0);
         }
         printf("RECV: %s\n", recv_msg);
         //处理
