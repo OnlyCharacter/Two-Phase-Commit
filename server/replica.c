@@ -336,6 +336,7 @@ main(int argc, char** argv)
                 }
 
                 close(connect_sock);
+                break;
             }
 
             else if (strncmp(pstr, "QUIT", 4) == 0) {
