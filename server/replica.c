@@ -276,6 +276,12 @@ main(int argc, char** argv)
                     break;
                 }
                 strncpy(value, pstr, BUFF_LEN);
+                pstr = strtok(NULL, " \t");
+                while (pstr != NULL) {
+                    strncat(value, " ", 2);
+                    strncat(value, pstr, strlen(pstr));
+                    pstr = strtok(NULL, " \t");
+                }
 
                 /*  执行    */
                 rc = sqlite_insert(&db, key, value);
